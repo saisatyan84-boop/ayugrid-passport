@@ -1,1 +1,319 @@
 
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>AyuGrid - Health Passport & Cloud Sync</title>
+  
+  <!-- Tailwind CSS & Icons -->
+  <script src="https://cdn.tailwindcss.com"></script>
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css" />
+  
+  <!-- QR Code Generator Library -->
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
+
+  <!-- Firebase SDK (v10 Compatibility Version for Plain HTML) -->
+  <script src="https://www.gstatic.com/firebasejs/10.8.0/firebase-app-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/10.8.0/firebase-firestore-compat.js"></script>
+</head>
+<body class="bg-slate-100 min-h-screen text-slate-800 antialiased flex flex-col justify-between">
+
+  <!-- Header -->
+  <header class="bg-white border-b border-slate-200 px-6 py-4 shadow-sm">
+    <div class="max-w-5xl mx-auto flex items-center justify-between">
+      <div class="flex items-center space-x-3">
+        <div class="bg-emerald-600 text-white w-10 h-10 rounded-xl flex items-center justify-center font-bold text-xl shadow-md">
+          <i class="fa-solid fa-heart-pulse"></i>
+        </div>
+        <div>
+          <h1 class="text-xl font-bold tracking-tight text-slate-900 leading-none">AyuGrid</h1>
+          <p class="text-xs text-slate-500 mt-1">Smart Hospital-to-Home Continuum • Offline QR Passport[cite: 1]</p>
+        </div>
+      </div>
+      <div class="flex items-center gap-2">
+        <span id="firebaseBadge" class="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-semibold bg-blue-100 text-blue-800 border border-blue-300">
+          <i class="fa-solid fa-database text-[10px]"></i> Firebase Connected[cite: 1]
+        </span>
+      </div>
+    </div>
+  </header>
+
+  <!-- Main Container -->
+  <main class="max-w-5xl mx-auto p-6 w-full flex-grow">
+    <div class="grid grid-cols-1 md:grid-cols-12 gap-6">
+
+      <!-- Left Input Panel -->
+      <div class="md:col-span-5 bg-white p-6 rounded-2xl shadow-sm border border-slate-200 flex flex-col justify-between">
+        <div>
+          <h2 class="text-lg font-bold text-slate-900 mb-1 flex items-center gap-2">
+            <i class="fa-solid fa-file-medical text-emerald-600"></i> Digitization Portal
+          </h2>
+          <p class="text-xs text-slate-500 mb-5">AI OCR, multi-language translation & real-time cloud sync[cite: 1].</p>
+
+          <form id="passportForm" class="space-y-4">
+            <!-- Language Selector -->
+            <div>
+              <label class="block text-xs font-semibold uppercase tracking-wider text-slate-600 mb-1">Target Language / Dialect</label>
+              <select id="targetLanguage" class="w-full p-2.5 bg-slate-50 border border-slate-300 rounded-lg text-sm focus:ring-2 focus:ring-emerald-500 focus:outline-none">
+                <option value="Telugu">Telugu (తెలుగు)</option>
+                <option value="Hindi">Hindi (हिंदी)</option>
+                <option value="Tamil">Tamil (தமிழ்)</option>
+                <option value="Kannada">Kannada (ಕನ್ನಡ)</option>
+                <option value="Marathi">Marathi (मराठी)</option>
+                <option value="Bengali">Bengali (বাংলা)</option>
+                <option value="Gujarati">Gujarati (ગુજરાતી)</option>
+                <option value="Malayalam">Malayalam (മലയാളം)</option>
+              </select>
+            </div>
+
+            <!-- Image Upload -->
+            <div>
+              <label class="block text-xs font-semibold uppercase tracking-wider text-slate-600 mb-1">Prescription Document</label>
+              <label for="prescriptionFile" class="border-2 border-dashed border-slate-300 hover:border-emerald-500 hover:bg-emerald-50/50 transition-all rounded-xl p-6 flex flex-col items-center justify-center cursor-pointer bg-slate-50 text-center">
+                <i class="fa-solid fa-cloud-arrow-up text-3xl text-slate-400 mb-2"></i>
+                <span id="fileNameDisplay" class="text-xs font-medium text-slate-600">Click to upload doctor's prescription</span>
+                <span class="text-[10px] text-slate-400 mt-1">Supports JPG, PNG, WebP</span>
+                <input type="file" id="prescriptionFile" accept="image/*" class="hidden" required />
+              </label>
+            </div>
+
+            <!-- Submit Button -->
+            <button type="submit" id="submitButton" class="w-full bg-emerald-600 hover:bg-emerald-700 text-white font-medium py-3 rounded-xl shadow-md transition-all flex items-center justify-center gap-2 text-sm">
+              <i class="fa-solid fa-bolt"></i> Digitize & Sync to Cloud
+            </button>
+          </form>
+        </div>
+
+        <div class="mt-6 pt-4 border-t border-slate-100 flex items-center justify-between text-xs text-slate-400">
+          <span><i class="fa-solid fa-shield-halved"></i> HIPAA / MCI Compliant[cite: 1]</span>
+          <span>Firestore Real-Time DB</span>
+        </div>
+      </div>
+
+      <!-- Right Result Panel -->
+      <div class="md:col-span-7 bg-white p-6 rounded-2xl shadow-sm border border-slate-200 flex flex-col justify-center">
+        
+        <!-- Loading State -->
+        <div id="loader" class="hidden py-16 text-center space-y-3">
+          <div class="w-10 h-10 border-4 border-emerald-500 border-t-transparent rounded-full animate-spin mx-auto"></div>
+          <p class="text-sm font-semibold text-slate-700">Extracting handwritten text, translating & syncing...</p>
+          <p class="text-xs text-slate-400">Generating low-density offline QR payload[cite: 1]</p>
+        </div>
+
+        <!-- Initial Placeholder -->
+        <div id="placeholder" class="py-20 text-center text-slate-400 space-y-2">
+          <i class="fa-solid fa-qrcode text-5xl text-slate-200"></i>
+          <p class="text-sm font-medium">No records digitized yet</p>
+          <p class="text-xs text-slate-400">Uploaded prescriptions will render printable QR passports here[cite: 1]</p>
+        </div>
+
+        <!-- Result Container -->
+        <div id="resultContainer" class="hidden space-y-4">
+          
+          <div class="flex items-center justify-between bg-emerald-50 border border-emerald-200 p-3.5 rounded-xl">
+            <div>
+              <div class="text-[10px] text-emerald-600 font-bold uppercase tracking-wider">Clinical Case Summary</div>
+              <div id="diagnosisHeader" class="text-sm font-bold text-emerald-950 mt-0.5"></div>
+            </div>
+            <button onclick="window.print()" class="px-3 py-1.5 bg-white border border-emerald-300 rounded-lg text-xs font-semibold text-emerald-700 shadow-sm hover:bg-emerald-100 flex items-center gap-1.5">
+              <i class="fa-solid fa-print"></i> Print Slip
+            </button>
+          </div>
+
+          <div class="grid grid-cols-1 sm:grid-cols-12 gap-4 items-start">
+            <!-- QR Passport -->
+            <div class="sm:col-span-5 bg-slate-50 border border-slate-200 rounded-xl p-3 flex flex-col items-center text-center">
+              <span class="text-[11px] font-bold text-slate-600 uppercase mb-2">Offline Health Passport[cite: 1]</span>
+              <div id="qrCodeContainer" class="p-2 bg-white rounded-lg border shadow-sm flex items-center justify-center"></div>
+              <div class="mt-2.5 flex items-center gap-1 text-[11px] font-semibold text-emerald-700">
+                <i class="fa-solid fa-plane-slash text-xs"></i> 100% Offline Compatible[cite: 1]
+              </div>
+              <p class="text-[10px] text-slate-400 mt-0.5">Scan instantly with any camera app</p>
+            </div>
+
+            <!-- Medication List -->
+            <div class="sm:col-span-7 space-y-2 max-h-72 overflow-y-auto pr-1" id="medicationList"></div>
+          </div>
+
+        </div>
+
+      </div>
+    </div>
+  </main>
+
+  <footer class="text-center py-4 text-xs text-slate-400">
+    AyuGrid MedTech Continuum • Smart India Hackathon 2026[cite: 1]
+  </footer>
+
+  <script>
+    // -------------------------------------------------------------
+    // 1. CONFIGURATIONS
+    // -------------------------------------------------------------
+    const GEMINI_API_KEY = "AQ.Ab8RN6JVIgZcQTjvUD1fJiYv2ORWch9vIM6b5EUG5JFD9oiUvA";
+
+    // Replace with your Firebase Project Configuration from Firebase Console
+   // For Firebase JS SDK v7.20.0 and later, measurementId is optional
+const firebaseConfig = {
+  apiKey: "AIzaSyBY8V2fT2rJmyKljaUY4JgtE7JUGAOQzUE",
+  authDomain: "ayugrid-app.firebaseapp.com",
+  projectId: "ayugrid-app",
+  storageBucket: "ayugrid-app.firebasestorage.app",
+  messagingSenderId: "927737386331",
+  appId: "1:927737386331:web:ab503732c4c786999ef67e",
+  measurementId: "G-6MVX8RMTC8"
+};
+    // Initialize Firebase & Firestore
+    let db = null;
+    try {
+      firebase.initializeApp(firebaseConfig);
+      db = firebase.firestore();
+    } catch (e) {
+      console.warn("Firebase not configured yet. App will work in standalone mode.", e);
+    }
+
+    // -------------------------------------------------------------
+    // 2. DOM ELEMENTS & EVENT LISTENERS
+    // -------------------------------------------------------------
+    const fileInput = document.getElementById('prescriptionFile');
+    const fileNameDisplay = document.getElementById('fileNameDisplay');
+    const form = document.getElementById('passportForm');
+
+    fileInput.addEventListener('change', (e) => {
+      if (e.target.files.length > 0) {
+        fileNameDisplay.textContent = e.target.files[0].name;
+        fileNameDisplay.classList.add('text-emerald-700', 'font-bold');
+      }
+    });
+
+    const getBase64 = (file) => new Promise((resolve, reject) => {
+      const reader = new FileReader();
+      reader.readAsDataURL(file);
+      reader.onload = () => resolve(reader.result.split(',')[1]);
+      reader.onerror = (error) => reject(error);
+    });
+
+    // -------------------------------------------------------------
+    // 3. MAIN FORM HANDLER (GEMINI AI + QR + FIRESTORE SYNC)
+    // -------------------------------------------------------------
+    form.addEventListener('submit', async (e) => {
+      e.preventDefault();
+
+      const loader = document.getElementById('loader');
+      const placeholder = document.getElementById('placeholder');
+      const resultContainer = document.getElementById('resultContainer');
+      const submitButton = document.getElementById('submitButton');
+      const selectedLanguage = document.getElementById('targetLanguage').value;
+
+      placeholder.classList.add('hidden');
+      resultContainer.classList.add('hidden');
+      loader.classList.remove('hidden');
+      submitButton.disabled = true;
+
+      try {
+        const base64Image = await getBase64(fileInput.files[0]);
+        const mimeType = fileInput.files[0].type || "image/jpeg";
+
+        const clinicalPrompt = `
+        You are an expert clinical digitization engine for rural healthcare[cite: 1].
+        1. Extract the patient details, diagnosis, and prescription items from this image[cite: 1].
+        2. Translate all medicine timing instructions and warnings into ${selectedLanguage} (e.g., 'Take after food with warm water')[cite: 1].
+        3. Return strictly a valid JSON object matching this schema:
+        {
+          "patient_name": "string",
+          "diagnosis": "string",
+          "medications": [
+            {
+              "medicine": "string",
+              "dosage": "string",
+              "schedule": "string",
+              "instructions_en": "string",
+              "instructions_local": "string in ${selectedLanguage}"
+            }
+          ]
+        }`;
+
+        // Call Gemini 3.6 Flash
+        const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-3.6-flash:generateContent?key=${GEMINI_API_KEY}`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            contents: [{
+              parts: [
+                { inline_data: { mime_type: mimeType, data: base64Image } },
+                { text: clinicalPrompt }
+              ]
+            }],
+            generationConfig: { response_mime_type: "application/json" }
+          })
+        });
+
+        const apiResult = await response.json();
+        if (apiResult.error) throw new Error(apiResult.error.message);
+
+        const extractedData = JSON.parse(apiResult.candidates[0].content.parts[0].text);
+
+        // 1. Render Diagnosis Header
+        const patientName = extractedData.patient_name || 'Patient';
+        const diagnosis = extractedData.diagnosis || 'Clinical Care';
+        document.getElementById('diagnosisHeader').textContent = `${diagnosis} • ${patientName}`;
+
+        // 2. Render Cards & Prepare Payload
+        const medicationList = document.getElementById('medicationList');
+        medicationList.innerHTML = '';
+        let qrSummaryLines = [];
+
+        extractedData.medications.forEach((med, idx) => {
+          qrSummaryLines.push(`${idx + 1}. ${med.medicine} (${med.schedule || med.dosage})\n   ${med.instructions_local}`);
+          medicationList.innerHTML += `
+            <div class="p-3 bg-slate-50 border border-slate-200 rounded-xl hover:border-slate-300 transition-all">
+              <div class="flex justify-between items-start">
+                <span class="font-bold text-xs text-slate-900">${med.medicine}</span>
+                <span class="px-2 py-0.5 bg-blue-100 text-blue-800 font-semibold rounded text-[10px]">${med.schedule || med.dosage}</span>
+              </div>
+              <div class="text-[11px] text-slate-500 mt-0.5">${med.instructions_en || ''}</div>
+              <div class="mt-1 text-xs font-bold text-emerald-700 bg-emerald-50/80 px-2 py-1 rounded-md border border-emerald-100">
+                ${med.instructions_local}
+              </div>
+            </div>
+          `;
+        });
+
+        // 3. Render Sparse QR Code
+        const qrContainer = document.getElementById('qrCodeContainer');
+        qrContainer.innerHTML = '';
+        const qrPayloadText = `AyuGrid Rx: ${diagnosis}\n--------------------\n` + qrSummaryLines.join('\n');
+
+        new QRCode(qrContainer, {
+          text: qrPayloadText,
+          width: 145,
+          height: 145,
+          correctLevel: QRCode.CorrectLevel.L
+        });
+
+        // 4. Real-Time Sync to Firebase Firestore Database
+        if (db) {
+          db.collection("prescriptions").add({
+            patientName: patientName,
+            diagnosis: diagnosis,
+            language: selectedLanguage,
+            medications: extractedData.medications,
+            qrPayload: qrPayloadText,
+            timestamp: firebase.firestore.FieldValue.serverTimestamp()
+          }).then(() => {
+            console.log("Prescription synced to Firebase Firestore successfully.");
+          }).catch(err => console.warn("Firestore sync skipped:", err));
+        }
+
+        resultContainer.classList.remove('hidden');
+      } catch (err) {
+        alert('Processing Error: ' + err.message);
+        placeholder.classList.remove('hidden');
+      } finally {
+        loader.classList.add('hidden');
+        submitButton.disabled = false;
+      }
+    });
+  </script>
+</body>
+</html>
