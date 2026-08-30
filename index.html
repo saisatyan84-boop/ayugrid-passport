@@ -3,6 +3,12 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  
+  <!-- Prevent Aggressive Browser Caching -->
+  <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate" />
+  <meta http-equiv="Pragma" content="no-cache" />
+  <meta http-equiv="Expires" content="0" />
+
   <title>AyuGrid - Health Passport & Cloud Sync</title>
   
   <!-- Tailwind CSS & Font Awesome Icons -->
@@ -17,13 +23,21 @@
   <script src="https://www.gstatic.com/firebasejs/10.8.0/firebase-firestore-compat.js"></script>
 
   <style>
-    /* Ensure QR canvas fits precisely inside container */
+    /* Absolute centering and sizing for QR canvas */
+    #qrCanvasWrapper {
+      width: 150px;
+      height: 150px;
+      margin: 0 auto;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+    }
     #qrCanvas {
-      margin: 0 auto !important;
+      width: 140px !important;
+      height: 140px !important;
       display: block !important;
-      border-radius: 8px;
-      max-width: 100%;
-      height: auto;
+      margin: 0 auto !important;
+      border-radius: 6px;
     }
 
     /* Print specific styling for clean Rx Passport generation */
@@ -62,7 +76,7 @@
         </div>
         <div>
           <h1 class="text-xl font-bold tracking-tight text-slate-900 leading-none">
-            AyuGrid <span class="text-xs font-semibold text-emerald-700 bg-emerald-100 px-2 py-0.5 rounded-full border border-emerald-300 ml-1">v3.5 Flash</span>
+            AyuGrid <span class="text-xs font-bold text-emerald-800 bg-emerald-100 px-2 py-0.5 rounded-full border border-emerald-300 ml-1">v4.0 (Fixed QR)</span>
           </h1>
           <p class="text-xs text-slate-500 mt-1">Smart Hospital-to-Home Continuum • Offline QR Passport</p>
         </div>
@@ -104,8 +118,8 @@
             <div>
               <label for="targetLanguage" class="block text-xs font-semibold uppercase tracking-wider text-slate-600 mb-1">Target Language / Dialect</label>
               <select id="targetLanguage" class="w-full p-2.5 bg-slate-50 border border-slate-300 rounded-lg text-sm focus:ring-2 focus:ring-emerald-500 focus:outline-none">
-                <option value="Tamil" selected>Tamil (தமிழ்)</option>
-                <option value="Telugu">Telugu (తెలుగు)</option>
+                <option value="Telugu" selected>Telugu (తెలుగు)</option>
+                <option value="Tamil">Tamil (தமிழ்)</option>
                 <option value="Hindi">Hindi (हिंदी)</option>
                 <option value="Kannada">Kannada (ಕನ್ನಡ)</option>
                 <option value="Marathi">Marathi (मराठी)</option>
@@ -181,19 +195,22 @@
           </div>
 
           <div class="grid grid-cols-1 sm:grid-cols-12 gap-4 items-start">
-            <!-- QR Passport (Centered & Perfectly Sized) -->
-            <div class="sm:col-span-5 bg-slate-50 border border-slate-200 rounded-xl p-4 flex flex-col items-center justify-center text-center print-card">
-              <span class="text-[11px] font-bold text-slate-600 uppercase mb-2.5">Offline Health Passport</span>
+            
+            <!-- QR Passport (Centered & Sized Box) -->
+            <div class="sm:col-span-5 bg-slate-50 border border-slate-200 rounded-2xl p-4 flex flex-col items-center justify-center text-center print-card shadow-sm">
+              <span class="text-[11px] font-bold text-slate-700 uppercase tracking-wider mb-2.5">Offline Health Passport</span>
               
-              <!-- Clean Centered QR Canvas Box -->
-              <div class="p-2.5 bg-white rounded-xl border border-slate-200 shadow-sm flex items-center justify-center overflow-hidden w-fit mx-auto">
-                <canvas id="qrCanvas" class="w-[140px] h-[140px]"></canvas>
+              <!-- Clean Centered QR Container (No Overflows) -->
+              <div class="w-[155px] h-[155px] bg-white rounded-xl border border-slate-200 shadow-sm flex items-center justify-center p-1.5 mx-auto">
+                <div id="qrCanvasWrapper">
+                  <canvas id="qrCanvas"></canvas>
+                </div>
               </div>
 
-              <div class="mt-3 flex items-center gap-1 text-[11px] font-semibold text-emerald-700">
+              <div class="mt-3 flex items-center justify-center gap-1.5 text-[11px] font-semibold text-emerald-700">
                 <i class="fa-solid fa-plane-slash text-xs"></i> 100% Offline Compatible
               </div>
-              <p class="text-[10px] text-slate-400 mt-0.5">Scan instantly with any camera app</p>
+              <p class="text-[10px] text-slate-400 mt-0.5">Scan with phone camera</p>
             </div>
 
             <!-- Medication List -->
@@ -396,7 +413,6 @@
         fileNameDisplay.textContent = file.name;
         fileNameDisplay.classList.add('text-emerald-700', 'font-bold');
 
-        // Render preview thumbnail
         const reader = new FileReader();
         reader.onload = (event) => {
           imagePreview.src = event.target.result;
@@ -501,12 +517,11 @@
         const base64Image = await getBase64(fileInput.files[0]);
         const mimeType = fileInput.files[0].type || "image/jpeg";
 
-        // Structured clinical prompt enforcing strict sequence & context-aware translation
         const clinicalPrompt = `
         You are an expert clinical digitization engine for healthcare continuum.
         1. Extract the patient details, diagnosis, and all prescribed medication items in their exact numbered order (Item 1, Item 2, Item 3...) as written by the doctor.
         2. Recognize the route of administration (e.g. eye drops, ear drops, tablets, ointments) and provide accurate dosage frequency instructions.
-        3. Translate all usage timing and warnings into natural, accurate ${selectedLanguage} (e.g. For eye drops: 'நாளில் 6 முறை கண்ணில் 1 துளி இடவும்', For tablets: 'உணவுக்குப் பின் 1 மாத்திரை எடுக்கவும்').
+        3. Translate all usage timing and warnings into natural, accurate ${selectedLanguage} (e.g. For eye drops: 'ప్రభావిత కంటిలో రోజుకు 6 సార్లు 1 చుక్క వేయండి', For tablets: 'భోజనం తర్వాత 1 టాబ్లెట్ వేసుకోండి').
         4. Return strictly a valid JSON object matching this schema without markdown codeblocks:
         {
           "patient_name": "string",
@@ -552,8 +567,7 @@
             const instrLocal = med.instructions_local || med.instructions_en || '';
             const instrEn = med.instructions_en || '';
 
-            // Plain clean text for QR scanner
-            qrSummaryLines.push(`${num}. ${medName} (${schedule})\n-> ${instrLocal}`);
+            qrSummaryLines.push(`${num}. ${medName} (${schedule})\n   ${instrLocal}`);
 
             medicationList.innerHTML += `
               <div class="p-3 bg-slate-50 border border-slate-200 rounded-xl hover:border-slate-300 transition-all shadow-sm">
