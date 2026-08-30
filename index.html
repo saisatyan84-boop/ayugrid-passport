@@ -52,7 +52,7 @@
           <i class="fa-solid fa-heart-pulse"></i>
         </div>
         <div>
-          <h1 class="text-xl font-bold tracking-tight text-slate-900 leading-none">AyuGrid</h1>
+          <h1 class="text-xl font-bold tracking-tight text-slate-900 leading-none">AyuGrid <span class="text-xs font-normal text-emerald-600 bg-emerald-50 px-2 py-0.5 rounded border border-emerald-200 ml-1">v2.0 (Gemini 2.5)</span></h1>
           <p class="text-xs text-slate-500 mt-1">Smart Hospital-to-Home Continuum • Offline QR Passport</p>
         </div>
       </div>
@@ -134,7 +134,7 @@
         <!-- Loading State -->
         <div id="loader" class="hidden py-16 text-center space-y-3">
           <div class="w-10 h-10 border-4 border-emerald-500 border-t-transparent rounded-full animate-spin mx-auto"></div>
-          <p id="loaderStatus" class="text-sm font-semibold text-slate-700">Connecting to Gemini AI...</p>
+          <p id="loaderStatus" class="text-sm font-semibold text-slate-700">Connecting to Gemini AI Engine...</p>
           <p class="text-xs text-slate-400">Digitizing handwritten text & translating</p>
         </div>
 
@@ -199,11 +199,8 @@
       </div>
       <div class="text-xs text-slate-500 space-y-2">
         <p>
-          Make sure your API key is generated from <a href="https://aistudio.google.com/app/apikey" target="_blank" class="text-emerald-600 underline font-bold">Google AI Studio (Click here)</a>.
+          Get your key from <a href="https://aistudio.google.com/app/apikey" target="_blank" class="text-emerald-600 underline font-bold">Google AI Studio (Click here)</a>.
         </p>
-        <div class="p-2.5 bg-amber-50 rounded-lg border border-amber-200 text-amber-800 text-[11px]">
-          ⚠️ <strong>Note:</strong> Do <em>not</em> use your Firebase API key here. Firebase keys do not have Generative AI permissions enabled.
-        </div>
       </div>
       <div>
         <label for="modalApiKeyInput" class="block text-xs font-semibold text-slate-700 mb-1">Google AI Studio API Key</label>
@@ -311,48 +308,29 @@
       reader.onerror = (error) => reject(error);
     });
 
-    // UTF-8 string encoding helper for QRCode.js compatibility with regional scripts
     function toUtf8Bytes(str) {
       return unescape(encodeURIComponent(str));
     }
 
-    // Intelligently query available models or fallback across versions
-    async function executeGeminiVision(apiKey, mimeType, base64Image, clinicalPrompt) {
-      // 1. First attempt to dynamically discover available models for this specific key
-      let modelsToTry = [
-        "gemini-2.0-flash",
-        "gemini-1.5-flash-8b",
-        "gemini-1.5-flash",
+    // -------------------------------------------------------------
+    // 3. GEMINI 2.5 / 2.0 VISION API CALL WITH MULTI-VERSION FALLBACK
+    // -------------------------------------------------------------
+    async function processPrescriptionWithGemini(apiKey, mimeType, base64Image, clinicalPrompt) {
+      // Modern active models
+      const models = [
         "gemini-2.5-flash",
-        "gemini-1.5-pro"
+        "gemini-2.0-flash",
+        "gemini-2.5-pro",
+        "gemini-2.0-flash-lite"
       ];
 
-      try {
-        const listResp = await fetch(`https://generativelanguage.googleapis.com/v1beta/models?key=${apiKey}`);
-        const listData = await listResp.json();
-        if (listData && listData.models && Array.isArray(listData.models)) {
-          const supported = listData.models
-            .filter(m => m.supportedGenerationMethods && m.supportedGenerationMethods.includes("generateContent"))
-            .map(m => m.name.replace(/^models\//, ''));
-          if (supported.length > 0) {
-            modelsToTry = [...supported, ...modelsToTry];
-          }
-        }
-      } catch (err) {
-        console.warn("Could not list models, proceeding with standard candidate list.", err);
-      }
+      let lastErrorMessage = "";
 
-      // Remove duplicates
-      modelsToTry = [...new Set(modelsToTry)];
-
-      let lastError = null;
-
-      for (const model of modelsToTry) {
-        // Try v1beta and v1 endpoints
-        for (const apiVersion of ['v1beta', 'v1']) {
+      for (const model of models) {
+        for (const version of ["v1beta", "v1"]) {
           try {
-            const endpointUrl = `https://generativelanguage.googleapis.com/${apiVersion}/models/${model}:generateContent?key=${apiKey}`;
-            const response = await fetch(endpointUrl, {
+            const url = `https://generativelanguage.googleapis.com/${version}/models/${model}:generateContent?key=${apiKey}`;
+            const res = await fetch(url, {
               method: 'POST',
               headers: { 'Content-Type': 'application/json' },
               body: JSON.stringify({
@@ -369,38 +347,29 @@
               })
             });
 
-            const apiResult = await response.json();
+            const data = await res.json();
 
-            if (apiResult.error) {
-              // Check if authentication error or missing permission
-              if (apiResult.error.status === "PERMISSION_DENIED" || apiResult.error.code === 403) {
-                throw new Error("Permission Denied: Make sure your key is generated from Google AI Studio (aistudio.google.com) and NOT Firebase Console.");
-              }
-              lastError = new Error(apiResult.error.message);
+            if (data.error) {
+              lastErrorMessage = data.error.message;
+              console.warn(`Attempt with ${model} on ${version} failed:`, data.error.message);
               continue;
             }
 
-            if (apiResult.candidates && apiResult.candidates[0] && apiResult.candidates[0].content) {
-              console.log(`Success with model ${model} on ${apiVersion}`);
-              return apiResult;
+            if (data.candidates && data.candidates[0] && data.candidates[0].content) {
+              console.log(`Successfully generated using ${model} (${version})`);
+              return data;
             }
-          } catch (err) {
-            if (err.message && err.message.includes("Permission Denied")) {
-              throw err;
-            }
-            lastError = err;
+          } catch (fetchErr) {
+            lastErrorMessage = fetchErr.message;
           }
         }
       }
 
-      throw new Error(
-        lastError?.message || 
-        "Your API Key does not have Generative AI permissions. Please create a key from https://aistudio.google.com/app/apikey (Do NOT use a Firebase key)."
-      );
+      throw new Error(lastErrorMessage || "Unable to reach Gemini models with your API key. Ensure key is from https://aistudio.google.com/app/apikey");
     }
 
     // -------------------------------------------------------------
-    // 3. MAIN FORM HANDLER (GEMINI AI + QR + FIRESTORE SYNC)
+    // 4. MAIN FORM HANDLER
     // -------------------------------------------------------------
     form.addEventListener('submit', async (e) => {
       e.preventDefault();
@@ -409,13 +378,6 @@
       if (!apiKey) {
         openKeyModal();
         alert("Please enter and save your Gemini API Key before proceeding.");
-        return;
-      }
-
-      // Check if user accidentally pasted their Firebase config key
-      if (apiKey === firebaseConfig.apiKey) {
-        openKeyModal();
-        alert("You entered your Firebase API Key. Please enter a Google AI Studio key from https://aistudio.google.com/app/apikey instead.");
         return;
       }
 
@@ -458,11 +420,9 @@
           ]
         }`;
 
-        // Call Gemini with dynamic discovery
-        const apiResult = await executeGeminiVision(apiKey, mimeType, base64Image, clinicalPrompt);
+        const apiResult = await processPrescriptionWithGemini(apiKey, mimeType, base64Image, clinicalPrompt);
 
         let rawResponseText = apiResult.candidates[0].content.parts[0].text.trim();
-        // Remove markdown backticks if returned
         if (rawResponseText.startsWith("```")) {
           rawResponseText = rawResponseText.replace(/^```(json)?\n?/, '').replace(/\n?```$/, '');
         }
@@ -505,7 +465,7 @@
           medicationList.innerHTML = `<div class="p-4 text-center text-xs text-slate-500">No specific medications identified.</div>`;
         }
 
-        // 3. Render Sparse QR Code with UTF-8 support
+        // 3. Render QR Code
         const qrContainer = document.getElementById('qrCodeContainer');
         qrContainer.innerHTML = '';
         const qrPayloadText = `AyuGrid Rx: ${diagnosis} (${patientName})\n---\n` + qrSummaryLines.join('\n');
@@ -518,7 +478,6 @@
             correctLevel: QRCode.CorrectLevel.M
           });
         } catch (qrErr) {
-          console.warn("QR code generation fallback to compact:", qrErr);
           new QRCode(qrContainer, {
             text: toUtf8Bytes(`AyuGrid Rx: ${patientName} - ${diagnosis}`),
             width: 140,
@@ -527,7 +486,7 @@
           });
         }
 
-        // 4. Real-Time Sync to Firebase Firestore Database
+        // 4. Firestore Sync
         if (db) {
           db.collection("prescriptions").add({
             patientName: patientName,
