@@ -52,7 +52,9 @@
           <i class="fa-solid fa-heart-pulse"></i>
         </div>
         <div>
-          <h1 class="text-xl font-bold tracking-tight text-slate-900 leading-none">AyuGrid <span class="text-xs font-normal text-emerald-600 bg-emerald-50 px-2 py-0.5 rounded border border-emerald-200 ml-1">v2.0 (Gemini 2.5)</span></h1>
+          <h1 class="text-xl font-bold tracking-tight text-slate-900 leading-none">
+            AyuGrid <span class="text-xs font-semibold text-emerald-700 bg-emerald-100 px-2 py-0.5 rounded-full border border-emerald-300 ml-1">v3.5 Flash</span>
+          </h1>
           <p class="text-xs text-slate-500 mt-1">Smart Hospital-to-Home Continuum • Offline QR Passport</p>
         </div>
       </div>
@@ -134,7 +136,7 @@
         <!-- Loading State -->
         <div id="loader" class="hidden py-16 text-center space-y-3">
           <div class="w-10 h-10 border-4 border-emerald-500 border-t-transparent rounded-full animate-spin mx-auto"></div>
-          <p id="loaderStatus" class="text-sm font-semibold text-slate-700">Connecting to Gemini AI Engine...</p>
+          <p id="loaderStatus" class="text-sm font-semibold text-slate-700">Connecting to Gemini 3.5 AI Engine...</p>
           <p class="text-xs text-slate-400">Digitizing handwritten text & translating</p>
         </div>
 
@@ -265,7 +267,7 @@
       if (typeof firebase !== 'undefined' && firebase.initializeApp) {
         firebase.initializeApp(firebaseConfig);
         db = firebase.firestore();
-        firebaseStatusText.textContent = "Firebase Connected";
+        firebaseStatusText.textContent = "Firebase Ready";
       } else {
         throw new Error("Firebase SDK not loaded");
       }
@@ -313,59 +315,58 @@
     }
 
     // -------------------------------------------------------------
-    // 3. GEMINI 2.5 / 2.0 VISION API CALL WITH MULTI-VERSION FALLBACK
+    // 3. GEMINI 3.5 / 2.5 VISION API CALL
     // -------------------------------------------------------------
     async function processPrescriptionWithGemini(apiKey, mimeType, base64Image, clinicalPrompt) {
-      // Modern active models
+      // Primary current models as per Google API specifications
       const models = [
+        "gemini-3.5-flash-lite",
+        "gemini-3.5-flash",
+        "gemini-3.0-flash",
         "gemini-2.5-flash",
-        "gemini-2.0-flash",
-        "gemini-2.5-pro",
-        "gemini-2.0-flash-lite"
+        "gemini-2.5-pro"
       ];
 
       let lastErrorMessage = "";
 
       for (const model of models) {
-        for (const version of ["v1beta", "v1"]) {
-          try {
-            const url = `https://generativelanguage.googleapis.com/${version}/models/${model}:generateContent?key=${apiKey}`;
-            const res = await fetch(url, {
-              method: 'POST',
-              headers: { 'Content-Type': 'application/json' },
-              body: JSON.stringify({
-                contents: [{
-                  parts: [
-                    { inline_data: { mime_type: mimeType, data: base64Image } },
-                    { text: clinicalPrompt }
-                  ]
-                }],
-                generationConfig: { 
-                  response_mime_type: "application/json",
-                  temperature: 0.1 
-                }
-              })
-            });
+        try {
+          const url = `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${apiKey}`;
+          const res = await fetch(url, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              contents: [{
+                parts: [
+                  { inline_data: { mime_type: mimeType, data: base64Image } },
+                  { text: clinicalPrompt }
+                ]
+              }],
+              generationConfig: { 
+                response_mime_type: "application/json",
+                temperature: 0.1 
+              }
+            })
+          });
 
-            const data = await res.json();
+          const data = await res.json();
 
-            if (data.error) {
-              lastErrorMessage = data.error.message;
-              console.warn(`Attempt with ${model} on ${version} failed:`, data.error.message);
-              continue;
-            }
-
-            if (data.candidates && data.candidates[0] && data.candidates[0].content) {
-              console.log(`Successfully generated using ${model} (${version})`);
-              return data;
-            }
-          } catch (fetchErr) {
-            lastErrorMessage = fetchErr.message;
+          if (data.error) {
+            lastErrorMessage = data.error.message;
+            console.warn(`Model ${model} returned error:`, data.error.message);
+            continue;
           }
+
+          if (data.candidates && data.candidates[0] && data.candidates[0].content) {
+            console.log(`Successfully processed using ${model}`);
+            return data;
+          }
+        } catch (fetchErr) {
+          lastErrorMessage = fetchErr.message;
         }
       }
 
-      throw new Error(lastErrorMessage || "Unable to reach Gemini models with your API key. Ensure key is from https://aistudio.google.com/app/apikey");
+      throw new Error(lastErrorMessage || "Unable to reach Gemini API. Ensure your key is from https://aistudio.google.com/app/apikey");
     }
 
     // -------------------------------------------------------------
