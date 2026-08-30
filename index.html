@@ -9,21 +9,30 @@
   <script src="https://cdn.tailwindcss.com"></script>
   <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css" />
   
-  <!-- QR Code Generator Library -->
-  <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
+  <!-- Modern UTF-8 QR Code Generator (Full Indic Script Support) -->
+  <script src="https://cdn.jsdelivr.net/npm/qrcode@1.5.3/build/qrcode.min.js"></script>
 
   <!-- Firebase SDK (v10 Compatibility Version for Standalone Web) -->
   <script src="https://www.gstatic.com/firebasejs/10.8.0/firebase-app-compat.js"></script>
   <script src="https://www.gstatic.com/firebasejs/10.8.0/firebase-firestore-compat.js"></script>
 
   <style>
+    /* Ensure QR canvas fits precisely inside container */
+    #qrCanvas {
+      margin: 0 auto !important;
+      display: block !important;
+      border-radius: 8px;
+      max-width: 100%;
+      height: auto;
+    }
+
     /* Print specific styling for clean Rx Passport generation */
     @media print {
       body {
         background-color: white !important;
         color: black !important;
       }
-      header, footer, #inputPanel, #actionButtons, #apiModal, .no-print {
+      header, footer, #inputPanel, #actionButtons, #apiModal, #historyModal, .no-print {
         display: none !important;
       }
       #resultPanel {
@@ -59,14 +68,19 @@
         </div>
       </div>
 
-      <div class="flex items-center gap-3">
+      <div class="flex items-center gap-2">
+        <!-- View Cloud History Button -->
+        <button onclick="openHistoryModal()" class="px-3 py-1.5 rounded-lg border border-slate-300 text-slate-700 hover:bg-slate-50 text-xs font-medium flex items-center gap-1.5 transition">
+          <i class="fa-solid fa-clock-rotate-left text-blue-500"></i> Cloud Records
+        </button>
+
         <!-- Firebase Status Badge -->
         <span id="firebaseBadge" class="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-semibold bg-emerald-50 text-emerald-700 border border-emerald-200">
           <i class="fa-solid fa-database text-[10px]"></i> <span id="firebaseStatusText">Firebase Ready</span>
         </span>
 
         <!-- API Key Settings Button -->
-        <button id="apiKeyBtn" onclick="openKeyModal()" class="px-3 py-1.5 rounded-lg border border-slate-300 text-slate-700 hover:bg-slate-50 text-xs font-medium flex items-center gap-1.5 transition-colors">
+        <button id="apiKeyBtn" onclick="openKeyModal()" class="px-3 py-1.5 rounded-lg border border-slate-300 text-slate-700 hover:bg-slate-50 text-xs font-medium flex items-center gap-1.5 transition">
           <i class="fa-solid fa-key text-amber-500"></i> Gemini Key
         </button>
       </div>
@@ -83,16 +97,16 @@
           <h2 class="text-lg font-bold text-slate-900 mb-1 flex items-center gap-2">
             <i class="fa-solid fa-file-medical text-emerald-600"></i> Digitization Portal
           </h2>
-          <p class="text-xs text-slate-500 mb-5">AI OCR, multi-language translation & real-time cloud sync.</p>
+          <p class="text-xs text-slate-500 mb-5">AI OCR, native regional translation & QR health passport.</p>
 
           <form id="passportForm" class="space-y-4">
             <!-- Language Selector -->
             <div>
               <label for="targetLanguage" class="block text-xs font-semibold uppercase tracking-wider text-slate-600 mb-1">Target Language / Dialect</label>
               <select id="targetLanguage" class="w-full p-2.5 bg-slate-50 border border-slate-300 rounded-lg text-sm focus:ring-2 focus:ring-emerald-500 focus:outline-none">
-                <option value="Telugu" selected>Telugu (తెలుగు)</option>
+                <option value="Tamil" selected>Tamil (தமிழ்)</option>
+                <option value="Telugu">Telugu (తెలుగు)</option>
                 <option value="Hindi">Hindi (हिंदी)</option>
-                <option value="Tamil">Tamil (தமிழ்)</option>
                 <option value="Kannada">Kannada (ಕನ್ನಡ)</option>
                 <option value="Marathi">Marathi (मराठी)</option>
                 <option value="Bengali">Bengali (বাংলা)</option>
@@ -150,10 +164,14 @@
         <!-- Result Container -->
         <div id="resultContainer" class="hidden space-y-4">
           
+          <!-- Summary Header -->
           <div class="flex items-center justify-between bg-emerald-50 border border-emerald-200 p-3.5 rounded-xl">
             <div>
               <div class="text-[10px] text-emerald-600 font-bold uppercase tracking-wider">Clinical Case Summary</div>
               <div id="diagnosisHeader" class="text-sm font-bold text-emerald-950 mt-0.5"></div>
+              <div id="syncBadge" class="hidden mt-1 text-[10px] font-semibold text-emerald-700 flex items-center gap-1">
+                <i class="fa-solid fa-circle-check"></i> <span>Saved to Firestore DB</span>
+              </div>
             </div>
             <div id="actionButtons" class="flex items-center gap-2">
               <button onclick="window.print()" class="px-3 py-1.5 bg-white border border-emerald-300 rounded-lg text-xs font-semibold text-emerald-700 shadow-sm hover:bg-emerald-100 flex items-center gap-1.5 transition">
@@ -163,18 +181,23 @@
           </div>
 
           <div class="grid grid-cols-1 sm:grid-cols-12 gap-4 items-start">
-            <!-- QR Passport -->
-            <div class="sm:col-span-5 bg-slate-50 border border-slate-200 rounded-xl p-3 flex flex-col items-center text-center print-card">
-              <span class="text-[11px] font-bold text-slate-600 uppercase mb-2">Offline Health Passport</span>
-              <div id="qrCodeContainer" class="p-2 bg-white rounded-lg border shadow-sm flex items-center justify-center min-w-[150px] min-h-[150px]"></div>
-              <div class="mt-2.5 flex items-center gap-1 text-[11px] font-semibold text-emerald-700">
+            <!-- QR Passport (Centered & Perfectly Sized) -->
+            <div class="sm:col-span-5 bg-slate-50 border border-slate-200 rounded-xl p-4 flex flex-col items-center justify-center text-center print-card">
+              <span class="text-[11px] font-bold text-slate-600 uppercase mb-2.5">Offline Health Passport</span>
+              
+              <!-- Clean Centered QR Canvas Box -->
+              <div class="p-2.5 bg-white rounded-xl border border-slate-200 shadow-sm flex items-center justify-center overflow-hidden w-fit mx-auto">
+                <canvas id="qrCanvas" class="w-[140px] h-[140px]"></canvas>
+              </div>
+
+              <div class="mt-3 flex items-center gap-1 text-[11px] font-semibold text-emerald-700">
                 <i class="fa-solid fa-plane-slash text-xs"></i> 100% Offline Compatible
               </div>
               <p class="text-[10px] text-slate-400 mt-0.5">Scan instantly with any camera app</p>
             </div>
 
             <!-- Medication List -->
-            <div class="sm:col-span-7 space-y-2 max-h-80 overflow-y-auto pr-1" id="medicationList"></div>
+            <div class="sm:col-span-7 space-y-2.5 max-h-80 overflow-y-auto pr-1" id="medicationList"></div>
           </div>
 
         </div>
@@ -211,6 +234,27 @@
       <div class="flex justify-end gap-2 pt-2">
         <button onclick="closeKeyModal()" class="px-4 py-2 text-xs font-medium text-slate-600 hover:bg-slate-100 rounded-lg">Cancel</button>
         <button onclick="saveApiKeyFromModal()" class="px-4 py-2 text-xs font-semibold text-white bg-emerald-600 hover:bg-emerald-700 rounded-lg shadow-sm">Save Key</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Cloud Records History Modal -->
+  <div id="historyModal" class="fixed inset-0 bg-slate-900/50 backdrop-blur-sm z-50 flex items-center justify-center hidden">
+    <div class="bg-white rounded-2xl max-w-lg w-full p-6 shadow-2xl border border-slate-200 mx-4 space-y-4 max-h-[85vh] flex flex-col">
+      <div class="flex items-center justify-between border-b pb-3">
+        <h3 class="text-base font-bold text-slate-900 flex items-center gap-2">
+          <i class="fa-solid fa-database text-emerald-600"></i> Cloud Synced Prescriptions
+        </h3>
+        <button onclick="closeHistoryModal()" class="text-slate-400 hover:text-slate-600 text-lg">
+          <i class="fa-solid fa-xmark"></i>
+        </button>
+      </div>
+      <p class="text-xs text-slate-500">Live records retrieved directly from your Firebase Firestore Database.</p>
+      <div id="historyList" class="overflow-y-auto space-y-3 flex-grow pr-1 text-xs">
+        <div class="text-center py-8 text-slate-400">Loading records from Firebase...</div>
+      </div>
+      <div class="flex justify-end pt-2 border-t">
+        <button onclick="closeHistoryModal()" class="px-4 py-2 text-xs font-medium text-slate-600 hover:bg-slate-100 rounded-lg">Close</button>
       </div>
     </div>
   </div>
@@ -280,7 +324,66 @@
     }
 
     // -------------------------------------------------------------
-    // 2. DOM ELEMENTS & PREVIEW LISTENERS
+    // 2. CLOUD DATABASE HISTORY VIEWER
+    // -------------------------------------------------------------
+    function openHistoryModal() {
+      document.getElementById('historyModal').classList.remove('hidden');
+      loadCloudHistory();
+    }
+
+    function closeHistoryModal() {
+      document.getElementById('historyModal').classList.add('hidden');
+    }
+
+    async function loadCloudHistory() {
+      const historyList = document.getElementById('historyList');
+      if (!db) {
+        historyList.innerHTML = `<div class="text-center py-6 text-slate-400">Firebase is not connected.</div>`;
+        return;
+      }
+
+      try {
+        const snapshot = await db.collection("prescriptions").orderBy("timestamp", "desc").limit(10).get();
+        if (snapshot.empty) {
+          historyList.innerHTML = `<div class="text-center py-6 text-slate-400">No prescriptions saved yet in Firestore.</div>`;
+          return;
+        }
+
+        let html = '';
+        snapshot.forEach(doc => {
+          const data = doc.data();
+          const dateStr = data.timestamp ? new Date(data.timestamp.toDate()).toLocaleString() : 'Just now';
+          const medCount = Array.isArray(data.medications) ? data.medications.length : 0;
+
+          html += `
+            <div class="p-3 bg-slate-50 border border-slate-200 rounded-xl space-y-1.5">
+              <div class="flex justify-between items-center">
+                <span class="font-bold text-slate-900">${data.diagnosis || 'Prescription'} • ${data.patientName || 'Patient'}</span>
+                <span class="text-[10px] text-slate-400">${dateStr}</span>
+              </div>
+              <div class="text-[11px] text-slate-500">
+                Language: <span class="font-semibold text-slate-700">${data.language || 'N/A'}</span> • ${medCount} Medications
+              </div>
+              <div class="text-[10px] font-mono text-emerald-700 bg-emerald-50 px-2 py-0.5 rounded border border-emerald-100 inline-block">
+                Doc ID: ${doc.id}
+              </div>
+            </div>
+          `;
+        });
+        historyList.innerHTML = html;
+      } catch (err) {
+        console.error("Firestore history read error:", err);
+        historyList.innerHTML = `
+          <div class="p-3 bg-red-50 text-red-700 rounded-lg border border-red-200 text-xs">
+            <strong>Firestore Rules Notice:</strong> ${err.message}.<br/>
+            Make sure Firestore security rules allow read/write in Firebase Console.
+          </div>
+        `;
+      }
+    }
+
+    // -------------------------------------------------------------
+    // 3. DOM ELEMENTS & PREVIEW LISTENERS
     // -------------------------------------------------------------
     const fileInput = document.getElementById('prescriptionFile');
     const fileNameDisplay = document.getElementById('fileNameDisplay');
@@ -310,21 +413,15 @@
       reader.onerror = (error) => reject(error);
     });
 
-    function toUtf8Bytes(str) {
-      return unescape(encodeURIComponent(str));
-    }
-
     // -------------------------------------------------------------
-    // 3. GEMINI 3.5 / 2.5 VISION API CALL
+    // 4. GEMINI 3.5 VISION API CALL
     // -------------------------------------------------------------
     async function processPrescriptionWithGemini(apiKey, mimeType, base64Image, clinicalPrompt) {
-      // Primary current models as per Google API specifications
       const models = [
         "gemini-3.5-flash-lite",
         "gemini-3.5-flash",
         "gemini-3.0-flash",
-        "gemini-2.5-flash",
-        "gemini-2.5-pro"
+        "gemini-2.5-flash"
       ];
 
       let lastErrorMessage = "";
@@ -370,7 +467,7 @@
     }
 
     // -------------------------------------------------------------
-    // 4. MAIN FORM HANDLER
+    // 5. MAIN FORM HANDLER
     // -------------------------------------------------------------
     form.addEventListener('submit', async (e) => {
       e.preventDefault();
@@ -392,9 +489,11 @@
       const resultContainer = document.getElementById('resultContainer');
       const submitButton = document.getElementById('submitButton');
       const selectedLanguage = document.getElementById('targetLanguage').value;
+      const syncBadge = document.getElementById('syncBadge');
 
       placeholder.classList.add('hidden');
       resultContainer.classList.add('hidden');
+      syncBadge.classList.add('hidden');
       loader.classList.remove('hidden');
       submitButton.disabled = true;
 
@@ -402,21 +501,24 @@
         const base64Image = await getBase64(fileInput.files[0]);
         const mimeType = fileInput.files[0].type || "image/jpeg";
 
+        // Structured clinical prompt enforcing strict sequence & context-aware translation
         const clinicalPrompt = `
         You are an expert clinical digitization engine for healthcare continuum.
-        1. Extract the patient details, diagnosis, and all prescribed medication items from this prescription image.
-        2. Translate all medicine dosage, timing instructions, and warnings into ${selectedLanguage} (e.g., 'Take after food with warm water').
-        3. Return strictly a valid JSON object matching this schema without markdown codeblocks:
+        1. Extract the patient details, diagnosis, and all prescribed medication items in their exact numbered order (Item 1, Item 2, Item 3...) as written by the doctor.
+        2. Recognize the route of administration (e.g. eye drops, ear drops, tablets, ointments) and provide accurate dosage frequency instructions.
+        3. Translate all usage timing and warnings into natural, accurate ${selectedLanguage} (e.g. For eye drops: 'நாளில் 6 முறை கண்ணில் 1 துளி இடவும்', For tablets: 'உணவுக்குப் பின் 1 மாத்திரை எடுக்கவும்').
+        4. Return strictly a valid JSON object matching this schema without markdown codeblocks:
         {
           "patient_name": "string",
           "diagnosis": "string",
           "medications": [
             {
+              "order_number": 1,
               "medicine": "string",
               "dosage": "string",
               "schedule": "string",
               "instructions_en": "string",
-              "instructions_local": "string in ${selectedLanguage}"
+              "instructions_local": "accurate translation in ${selectedLanguage}"
             }
           ]
         }`;
@@ -435,28 +537,35 @@
         const diagnosis = extractedData.diagnosis || 'Clinical Prescription';
         document.getElementById('diagnosisHeader').textContent = `${diagnosis} • ${patientName}`;
 
-        // 2. Render Cards & Prepare Compact Payload
+        // 2. Render Cards & Prepare Clean Payload for QR Code
         const medicationList = document.getElementById('medicationList');
         medicationList.innerHTML = '';
         let qrSummaryLines = [];
 
         if (Array.isArray(extractedData.medications) && extractedData.medications.length > 0) {
+          extractedData.medications.sort((a, b) => (a.order_number || 0) - (b.order_number || 0));
+
           extractedData.medications.forEach((med, idx) => {
+            const num = med.order_number || (idx + 1);
             const medName = med.medicine || 'Medicine';
             const schedule = med.schedule || med.dosage || 'As directed';
             const instrLocal = med.instructions_local || med.instructions_en || '';
             const instrEn = med.instructions_en || '';
 
-            qrSummaryLines.push(`${idx + 1}. ${medName} [${schedule}] - ${instrLocal}`);
+            // Plain clean text for QR scanner
+            qrSummaryLines.push(`${num}. ${medName} (${schedule})\n-> ${instrLocal}`);
 
             medicationList.innerHTML += `
-              <div class="p-3 bg-slate-50 border border-slate-200 rounded-xl hover:border-slate-300 transition-all">
+              <div class="p-3 bg-slate-50 border border-slate-200 rounded-xl hover:border-slate-300 transition-all shadow-sm">
                 <div class="flex justify-between items-start">
-                  <span class="font-bold text-xs text-slate-900">${medName}</span>
+                  <span class="font-bold text-xs text-slate-900 flex items-center gap-1.5">
+                    <span class="w-5 h-5 rounded-full bg-emerald-100 text-emerald-800 text-[10px] flex items-center justify-center font-bold">${num}</span>
+                    ${medName}
+                  </span>
                   <span class="px-2 py-0.5 bg-blue-100 text-blue-800 font-semibold rounded text-[10px]">${schedule}</span>
                 </div>
-                ${instrEn ? `<div class="text-[11px] text-slate-500 mt-0.5">${instrEn}</div>` : ''}
-                <div class="mt-1 text-xs font-bold text-emerald-700 bg-emerald-50/80 px-2 py-1 rounded-md border border-emerald-100">
+                ${instrEn ? `<div class="text-[11px] text-slate-500 mt-1 pl-6">${instrEn}</div>` : ''}
+                <div class="mt-1.5 text-xs font-bold text-emerald-800 bg-emerald-50 px-2.5 py-1.5 rounded-lg border border-emerald-100 ml-6">
                   ${instrLocal}
                 </div>
               </div>
@@ -466,28 +575,22 @@
           medicationList.innerHTML = `<div class="p-4 text-center text-xs text-slate-500">No specific medications identified.</div>`;
         }
 
-        // 3. Render QR Code
-        const qrContainer = document.getElementById('qrCodeContainer');
-        qrContainer.innerHTML = '';
-        const qrPayloadText = `AyuGrid Rx: ${diagnosis} (${patientName})\n---\n` + qrSummaryLines.join('\n');
+        // 3. Render Native UTF-8 QR Code on Canvas
+        const qrCanvas = document.getElementById('qrCanvas');
+        const qrPayloadText = `🏥 AyuGrid: ${diagnosis} (${patientName})\nLanguage: ${selectedLanguage}\n--------------------\n` + qrSummaryLines.join('\n');
 
-        try {
-          new QRCode(qrContainer, {
-            text: toUtf8Bytes(qrPayloadText),
-            width: 140,
-            height: 140,
-            correctLevel: QRCode.CorrectLevel.M
-          });
-        } catch (qrErr) {
-          new QRCode(qrContainer, {
-            text: toUtf8Bytes(`AyuGrid Rx: ${patientName} - ${diagnosis}`),
-            width: 140,
-            height: 140,
-            correctLevel: QRCode.CorrectLevel.L
-          });
-        }
+        // Using standard UTF-8 compliant QRCode generator
+        await QRCode.toCanvas(qrCanvas, qrPayloadText, {
+          width: 140,
+          margin: 1,
+          errorCorrectionLevel: 'M',
+          color: {
+            dark: '#0f172a',
+            light: '#ffffff'
+          }
+        });
 
-        // 4. Firestore Sync
+        // 4. Firestore Sync & Badge Confirmation
         if (db) {
           db.collection("prescriptions").add({
             patientName: patientName,
@@ -496,8 +599,10 @@
             medications: extractedData.medications || [],
             qrPayload: qrPayloadText,
             timestamp: firebase.firestore.FieldValue.serverTimestamp()
-          }).then(() => {
-            console.log("Prescription synced to Firebase Firestore successfully.");
+          }).then((docRef) => {
+            console.log("Prescription synced to Firebase Firestore with ID:", docRef.id);
+            syncBadge.classList.remove('hidden');
+            syncBadge.querySelector('span').textContent = `Saved to Firestore DB (ID: ${docRef.id.substring(0, 8)}...)`;
           }).catch(err => {
             console.warn("Firestore sync skipped or permission denied:", err);
           });
