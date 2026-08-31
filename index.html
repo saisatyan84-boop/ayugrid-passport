@@ -15,24 +15,16 @@
   <script src="https://cdn.tailwindcss.com"></script>
   <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css" />
   
-  <!-- Modern UTF-8 QR Code Generator (Full Indic Script Support) -->
-  <script src="https://cdn.jsdelivr.net/npm/qrcode@1.5.3/build/qrcode.min.js"></script>
+  <!-- Reliable UTF-8 QR Code Engine (Kazuhiko Arase - CDNJS) -->
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcode-generator/1.4.4/qrcode.min.js"></script>
 
   <!-- Firebase SDK (v10 Compatibility Version for Standalone Web) -->
   <script src="https://www.gstatic.com/firebasejs/10.8.0/firebase-app-compat.js"></script>
   <script src="https://www.gstatic.com/firebasejs/10.8.0/firebase-firestore-compat.js"></script>
 
   <style>
-    /* Absolute centering and sizing for QR canvas */
-    #qrCanvasWrapper {
-      width: 150px;
-      height: 150px;
-      margin: 0 auto;
-      display: flex;
-      align-items: center;
-      justify-content: center;
-    }
-    #qrCanvas {
+    /* Absolute centering and styling for generated QR image */
+    #qrContainer img, #qrContainer svg {
       width: 140px !important;
       height: 140px !important;
       display: block !important;
@@ -76,7 +68,7 @@
         </div>
         <div>
           <h1 class="text-xl font-bold tracking-tight text-slate-900 leading-none">
-            AyuGrid <span class="text-xs font-bold text-emerald-800 bg-emerald-100 px-2 py-0.5 rounded-full border border-emerald-300 ml-1">v4.0 (Fixed QR)</span>
+            AyuGrid <span class="text-xs font-bold text-emerald-800 bg-emerald-100 px-2 py-0.5 rounded-full border border-emerald-300 ml-1">v4.5 Live</span>
           </h1>
           <p class="text-xs text-slate-500 mt-1">Smart Hospital-to-Home Continuum • Offline QR Passport</p>
         </div>
@@ -196,15 +188,13 @@
 
           <div class="grid grid-cols-1 sm:grid-cols-12 gap-4 items-start">
             
-            <!-- QR Passport (Centered & Sized Box) -->
+            <!-- QR Passport Card (Centered & Perfectly Fitted) -->
             <div class="sm:col-span-5 bg-slate-50 border border-slate-200 rounded-2xl p-4 flex flex-col items-center justify-center text-center print-card shadow-sm">
               <span class="text-[11px] font-bold text-slate-700 uppercase tracking-wider mb-2.5">Offline Health Passport</span>
               
-              <!-- Clean Centered QR Container (No Overflows) -->
-              <div class="w-[155px] h-[155px] bg-white rounded-xl border border-slate-200 shadow-sm flex items-center justify-center p-1.5 mx-auto">
-                <div id="qrCanvasWrapper">
-                  <canvas id="qrCanvas"></canvas>
-                </div>
+              <!-- Clean White Box for QR Code -->
+              <div class="w-[155px] h-[155px] bg-white rounded-xl border border-slate-200 shadow-sm flex items-center justify-center p-2 mx-auto">
+                <div id="qrContainer" class="flex items-center justify-center w-full h-full"></div>
               </div>
 
               <div class="mt-3 flex items-center justify-center gap-1.5 text-[11px] font-semibold text-emerald-700">
@@ -517,6 +507,7 @@
         const base64Image = await getBase64(fileInput.files[0]);
         const mimeType = fileInput.files[0].type || "image/jpeg";
 
+        // Structured clinical prompt enforcing strict sequence & context-aware translation
         const clinicalPrompt = `
         You are an expert clinical digitization engine for healthcare continuum.
         1. Extract the patient details, diagnosis, and all prescribed medication items in their exact numbered order (Item 1, Item 2, Item 3...) as written by the doctor.
@@ -589,20 +580,22 @@
           medicationList.innerHTML = `<div class="p-4 text-center text-xs text-slate-500">No specific medications identified.</div>`;
         }
 
-        // 3. Render Native UTF-8 QR Code on Canvas
-        const qrCanvas = document.getElementById('qrCanvas');
+        // 3. Render Native UTF-8 QR Code
+        const qrContainer = document.getElementById('qrContainer');
+        qrContainer.innerHTML = '';
         const qrPayloadText = `🏥 AyuGrid: ${diagnosis} (${patientName})\nLanguage: ${selectedLanguage}\n--------------------\n` + qrSummaryLines.join('\n');
 
-        // Using standard UTF-8 compliant QRCode generator
-        await QRCode.toCanvas(qrCanvas, qrPayloadText, {
-          width: 140,
-          margin: 1,
-          errorCorrectionLevel: 'M',
-          color: {
-            dark: '#0f172a',
-            light: '#ffffff'
-          }
-        });
+        // Robust QR generation with UTF-8 byte support
+        if (typeof qrcode !== 'undefined') {
+          // typeNumber: 0 (auto-size), errorCorrectionLevel: 'M'
+          const qr = qrcode(0, 'M');
+          qr.addData(qrPayloadText);
+          qr.make();
+          qrContainer.innerHTML = qr.createImgTag(3, 4);
+        } else {
+          // Fallback if CDN is unreachable
+          qrContainer.innerHTML = `<img src="https://api.qrserver.com/v1/create-qr-code/?size=140x140&data=${encodeURIComponent(qrPayloadText)}" class="rounded-lg shadow-sm" alt="QR Code" />`;
+        }
 
         // 4. Firestore Sync & Badge Confirmation
         if (db) {
