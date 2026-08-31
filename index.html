@@ -15,7 +15,7 @@
   <script src="https://cdn.tailwindcss.com"></script>
   <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css" />
   
-  <!-- Reliable UTF-8 QR Code Engine (Kazuhiko Arase - CDNJS) -->
+  <!-- Reliable QR Code Engine (Kazuhiko Arase - CDNJS) -->
   <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcode-generator/1.4.4/qrcode.min.js"></script>
 
   <!-- Firebase SDK (v10 Compatibility Version for Standalone Web) -->
@@ -68,7 +68,7 @@
         </div>
         <div>
           <h1 class="text-xl font-bold tracking-tight text-slate-900 leading-none">
-            AyuGrid <span class="text-xs font-bold text-emerald-800 bg-emerald-100 px-2 py-0.5 rounded-full border border-emerald-300 ml-1">v4.5 Live</span>
+            AyuGrid <span class="text-xs font-bold text-emerald-800 bg-emerald-100 px-2 py-0.5 rounded-full border border-emerald-300 ml-1">v5.0 (UTF-8 Native)</span>
           </h1>
           <p class="text-xs text-slate-500 mt-1">Smart Hospital-to-Home Continuum • Offline QR Passport</p>
         </div>
@@ -110,9 +110,9 @@
             <div>
               <label for="targetLanguage" class="block text-xs font-semibold uppercase tracking-wider text-slate-600 mb-1">Target Language / Dialect</label>
               <select id="targetLanguage" class="w-full p-2.5 bg-slate-50 border border-slate-300 rounded-lg text-sm focus:ring-2 focus:ring-emerald-500 focus:outline-none">
-                <option value="Telugu" selected>Telugu (తెలుగు)</option>
+                <option value="Hindi" selected>Hindi (हिंदी)</option>
+                <option value="Telugu">Telugu (తెలుగు)</option>
                 <option value="Tamil">Tamil (தமிழ்)</option>
-                <option value="Hindi">Hindi (हिंदी)</option>
                 <option value="Kannada">Kannada (ಕನ್ನಡ)</option>
                 <option value="Marathi">Marathi (मराठी)</option>
                 <option value="Bengali">Bengali (বাংলা)</option>
@@ -268,8 +268,15 @@
 
   <script>
     // -------------------------------------------------------------
-    // 1. CONFIGURATIONS & API KEY MANAGEMENT
+    // 1. CONFIGURE UTF-8 ENCODER FOR QRCODE GENERATOR
     // -------------------------------------------------------------
+    // Register standard UTF-8 TextEncoder so Indic/Unicode strings are not corrupted
+    if (typeof qrcode !== 'undefined') {
+      qrcode.stringToBytes = function(s) {
+        return Array.from(new TextEncoder().encode(s));
+      };
+    }
+
     const GEMINI_STORAGE_KEY = "AYUGRID_GEMINI_KEY";
 
     function getGeminiApiKey() {
@@ -507,12 +514,12 @@
         const base64Image = await getBase64(fileInput.files[0]);
         const mimeType = fileInput.files[0].type || "image/jpeg";
 
-        // Structured clinical prompt enforcing strict sequence & context-aware translation
+        // Structured clinical prompt enforcing strict sequence & accurate contextual translation
         const clinicalPrompt = `
         You are an expert clinical digitization engine for healthcare continuum.
         1. Extract the patient details, diagnosis, and all prescribed medication items in their exact numbered order (Item 1, Item 2, Item 3...) as written by the doctor.
-        2. Recognize the route of administration (e.g. eye drops, ear drops, tablets, ointments) and provide accurate dosage frequency instructions.
-        3. Translate all usage timing and warnings into natural, accurate ${selectedLanguage} (e.g. For eye drops: 'ప్రభావిత కంటిలో రోజుకు 6 సార్లు 1 చుక్క వేయండి', For tablets: 'భోజనం తర్వాత 1 టాబ్లెట్ వేసుకోండి').
+        2. Recognize the route of administration (e.g. eye drops, ear drops, tablets, ointments) and identify accurate dosage frequency.
+        3. Translate dosage instructions into clear, natural, native ${selectedLanguage} (e.g. in Hindi: 'दिन में 6 बार 1 बूंद प्रभावित आंख में डालें' for eye drops; 'भोजन के बाद 1 गोली' for tablets; in Telugu: 'ప్రభావిత కంటిలో రోజుకు 6 సార్లు 1 చుక్క వేయండి'; in Tamil: 'நாளில் 6 முறை கண்ணில் 1 துளி இடவும்').
         4. Return strictly a valid JSON object matching this schema without markdown codeblocks:
         {
           "patient_name": "string",
@@ -524,7 +531,7 @@
               "dosage": "string",
               "schedule": "string",
               "instructions_en": "string",
-              "instructions_local": "accurate translation in ${selectedLanguage}"
+              "instructions_local": "accurate native translation in ${selectedLanguage}"
             }
           ]
         }`;
@@ -580,20 +587,26 @@
           medicationList.innerHTML = `<div class="p-4 text-center text-xs text-slate-500">No specific medications identified.</div>`;
         }
 
-        // 3. Render Native UTF-8 QR Code
+        // 3. Generate 100% Native UTF-8 QR Code (No mojibake / No garbled text)
         const qrContainer = document.getElementById('qrContainer');
         qrContainer.innerHTML = '';
-        const qrPayloadText = `🏥 AyuGrid: ${diagnosis} (${patientName})\nLanguage: ${selectedLanguage}\n--------------------\n` + qrSummaryLines.join('\n');
+        
+        // Clean ASCII/UTF-8 structured payload
+        const qrPayloadText = `AyuGrid Rx: ${diagnosis} (${patientName})\nLanguage: ${selectedLanguage}\n--------------------\n` + qrSummaryLines.join('\n');
 
-        // Robust QR generation with UTF-8 byte support
         if (typeof qrcode !== 'undefined') {
-          // typeNumber: 0 (auto-size), errorCorrectionLevel: 'M'
+          // Explicitly ensure UTF-8 TextEncoder is used
+          qrcode.stringToBytes = function(s) {
+            return Array.from(new TextEncoder().encode(s));
+          };
+
+          // typeNumber: 0 (auto-detect version from 1-40), errorCorrectionLevel: 'M'
           const qr = qrcode(0, 'M');
-          qr.addData(qrPayloadText);
+          qr.addData(qrPayloadText, 'Byte');
           qr.make();
           qrContainer.innerHTML = qr.createImgTag(3, 4);
         } else {
-          // Fallback if CDN is unreachable
+          // Fallback image
           qrContainer.innerHTML = `<img src="https://api.qrserver.com/v1/create-qr-code/?size=140x140&data=${encodeURIComponent(qrPayloadText)}" class="rounded-lg shadow-sm" alt="QR Code" />`;
         }
 
